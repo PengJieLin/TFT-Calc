@@ -1,0 +1,13 @@
+# Binaries
+bootstrap
+*.exe
+deployment.zip
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+
+# Local Data
+response.json
