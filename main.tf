@@ -1,3 +1,13 @@
+terraform {
+  backend "s3" {
+    bucket         = "tft-terraform-state-storage" # The bucket you just created
+    key            = "tft-optimizer/terraform.tfstate"
+    region         = "us-east-2"
+    encrypt        = true
+    # dynamodb_table = "terraform-lock" (Prevents two people from applying at once)
+  }
+}
+
 resource "aws_s3_bucket" "data_bucket" {
   # Note: Bucket names must be globally unique across all of AWS!
   bucket = var.bucket
