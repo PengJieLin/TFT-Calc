@@ -14,12 +14,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-// --- CONFIGURATION ---
-const TargetActiveTraits = 6
-const UseHighCost = false
-const PreferHighCost = false
 
 var bestTeam []Champion
+
+type SolverRequest struct {
+    UseHighCost        	bool `json:"use_high_cost"`
+    PreferHighCost     	bool `json:"prefer_high_cost"`
+    TargetActiveTraits 	int  `json:"target_active_traits"`
+	InitialTeam			string `json:"initial_team"`
+}
 
 type Champion struct {
 	Name   string   `json:"name"`
@@ -32,7 +35,17 @@ type Trait struct {
 	MinRequired int    `json:"minRequired"`
 }
 
-func HandleRequest(ctx context.Context) (string, error){
+func HandleDefaultRequest(req req){
+	if(req.targetActiveTraits == 0){ req.useHighCost = 6}
+}
+
+func HandleRequest(ctx context.Context, req solverRequest) (string, error){
+
+	solverRequest := HandleDefaultRequest(solverRequest)
+	useHighCost := solverRequest.UseHighCost
+	preferHighCost := solverRequest.PreferHighCost
+	targetActiveTraits := solverRequest.TargetActiveTraits 
+	initialTeam := solverRequest.InitialTeam
 
 	// Load AWS configuration (credentials, region, etc.)
     cfg, err := config.LoadDefaultConfig(ctx)
@@ -52,28 +65,23 @@ func HandleRequest(ctx context.Context) (string, error){
 	if err != nil { return "", err }
 
 
-	fmt.Printf("=== TFT Optimizer | Target: %d Active Traits ===\n", TargetActiveTraits)
-
-	// 1. Define Initial Board
-	initialTeam := []Champion{
-		{Name: "Kayn", Traits: []string{}, Cost: 3},
-	}
+	fmt.Printf("=== TFT Optimizer | Target: %d Active Traits ===\n", targetActiveTraits)
 
 	startTeam := make([]Champion, len(initialTeam))
 	copy(startTeam, initialTeam)
 
 	// 2. Step 1: Search WITHOUT 4-cost additions
-	if(!UseHighCost){
+	if(!useHighCost){
 		fmt.Println("Step 1: Searching for low-cost solutions (Cost < 4)...")
-		lowCostPool := filterPool(champs, initialTeam, 3)
-		solve(startTeam, lowCostPool, traits, 0, len(initialTeam))
+		lowCostPool := filterPool(champs, initialTeam, 3, preferHighCost)
+		solve(startTeam, lowCostPool, traits, len(initialTeam))
 	}
 
 	// 3. Step 2: Fallback to include 4-cost additions if no solution found
 	if len(bestTeam) == 0 {
 		fmt.Println("No solution found with low-cost units. Step 2: Including 4-cost units...")
-		fullPool := filterPool(champs, initialTeam, 4)
-		solve(startTeam, fullPool, traits, 0, len(initialTeam))
+		fullPool := filterPool(champs, initialTeam, 4, preferHighCost)
+		solve(startTeam, fullPool, traits, len(initialTeam))
 	}
 
 	// 4. Final Output
@@ -90,21 +98,21 @@ func main() {
 	lambda.Start(HandleRequest)
 }
 
-func solve(currentTeam []Champion, pool []Champion, allTraits []Trait, startIndex int, initialSize int) {
+func solve(currentTeam []Champion, pool []Champion, allTraits []Trait, initialSize int, TargetActiveTraits int) {
 	numAdded := len(currentTeam) - initialSize
 
 	if len(bestTeam) > 0 && numAdded >= len(bestTeam) {
 		return
 	}
 
-	if isSatisfied(currentTeam, allTraits, TargetActiveTraits) {
+	if isSatisfied(currentTeam, allTraits, targetActiveTraits) {
 		newUnits := make([]Champion, numAdded)
 		copy(newUnits, currentTeam[initialSize:])
 		bestTeam = newUnits
 		return
 	}
 
-	for i := startIndex; i < len(pool); i++ {
+	for i := 0; i < len(pool); i++ {
 		currentTeam = append(currentTeam, pool[i])
 		solve(currentTeam, pool, allTraits, i+1, initialSize)
 		currentTeam = currentTeam[:len(currentTeam)-1]
@@ -127,7 +135,7 @@ func isSatisfied(team []Champion, allTraits []Trait, threshold int) bool {
 	return activeCount >= threshold
 }
 
-func filterPool(champs []Champion, initialTeam []Champion, maxCost int) []Champion {
+func filterPool(champs []Champion, initialTeam []Champion, maxCost int, preferHighCost bool) []Champion {
 	var pool []Champion
 	for _, c := range champs {
 		isDuplicate := false
@@ -142,7 +150,8 @@ func filterPool(champs []Champion, initialTeam []Champion, maxCost int) []Champi
 		}
 	}
 	sort.Slice(pool, func(i, j int) bool {
-		if(PreferHighCost){
+		//Sort by cost then sort by trait count
+		if(preferHighCost){
 			if pool[i].Cost != pool[j].Cost {
 			return pool[i].Cost > pool[j].Cost
 			}
