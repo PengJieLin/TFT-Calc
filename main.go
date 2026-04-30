@@ -59,7 +59,7 @@ func cleanRequest(req SolverRequest) SolverRequest {
 
 func HandleRequest(ctx context.Context, req SolverRequest) (interface{}, error) {
 	// 1. Initialize local result slice for THIS request only
-	var bestTeam []Champion 
+	bestTeam := []Champion{}
 	req = cleanRequest(req)
 
 	// 2. Load data from S3 (Only happens once per Lambda instance)
