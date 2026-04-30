@@ -14,6 +14,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+var (
+    cachedChamps []Champion
+    cachedTraits []Trait
+    once         sync.Once
+)
+
 type SolverRequest struct {
     UseHighCost        	bool `json:"use_high_cost"`
     PreferHighCost     	bool `json:"prefer_high_cost"`
@@ -48,28 +54,30 @@ func cleanRequest(req SolverRequest) SolverRequest{
 func HandleRequest(ctx context.Context, req SolverRequest) (interface{}, error){
 	var bestTeam = []Champion{}
 	req = cleanRequest(req)
+	
 	useHighCost := req.UseHighCost
 	preferHighCost := req.PreferHighCost
 	targetActiveTraits := req.TargetActiveTraits 
 	initialTeam := req.InitialTeam
 
-	// Load AWS configuration (credentials, region, etc.)
-    cfg, err := config.LoadDefaultConfig(ctx)
-    if err != nil { return "", err }
+	once.Do(func() {
+		// Load AWS configuration (credentials, region, etc.)
+		cfg, err := config.LoadDefaultConfig(ctx)
+		if err != nil { return "", err }
 
-    // Create the S3 client
-    s3Client := s3.NewFromConfig(cfg)
-    
-    // Get the bucket name from an environment variable (we'll set this in Terraform later)
-    bucketName := os.Getenv("DATA_BUCKET")
+		// Create the S3 client
+		s3Client := s3.NewFromConfig(cfg)
+		
+		// Get the bucket name from an environment variable (we'll set this in Terraform later)
+		bucketName := os.Getenv("DATA_BUCKET")
 
-    // Now call your updated loaders
-    champs, err := loadChampions(ctx, s3Client, bucketName, "champions.csv")
-    if err != nil { return "", err }
+		// Now call your updated loaders
+		champs, err := loadChampions(ctx, s3Client, bucketName, "champions.csv")
+		if err != nil { return "", err }
 
-	traits, err := loadTraits(ctx, s3Client, bucketName, "traits.csv")
-	if err != nil { return "", err }
-
+		traits, err := loadTraits(ctx, s3Client, bucketName, "traits.csv")
+		if err != nil { return "", err }
+	})
 
 	fmt.Printf("=== TFT Optimizer | Target: %d Active Traits ===\n", targetActiveTraits)
 
