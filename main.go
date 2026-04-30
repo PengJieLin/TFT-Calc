@@ -35,13 +35,13 @@ type Trait struct {
 	MinRequired int    `json:"minRequired"`
 }
 
-func cleanRequest(req req){
-	if req.targetActiveTraits == 0{
-		req.targetActiveTraits = 6
+func cleanRequest(req SolverRequest){
+	if req.TargetActiveTraits == 0{
+		req.TargetActiveTraits = 6
 	} else if req.TargetActiveTraits > 11{
-		req.targetActiveTraits = 11
+		req.TargetActiveTraits = 11
 	}
-	if len(req.InitialTeam){ req.InitialTeam = req.InitialTeam[:8] }
+	if len(req.InitialTeam) > 8 { req.InitialTeam = req.InitialTeam[:8] }
 	for i, name := range req.InitialTeam {
 		req.InitialTeam[i] = strings.ToLower(strings.TrimSpace(name))
 	}
@@ -50,7 +50,7 @@ func cleanRequest(req req){
 
 func HandleRequest(ctx context.Context, req SolverRequest) (interface{}, error){
 
-	req := cleanRequest(req)
+	req = cleanRequest(req)
 	useHighCost := req.UseHighCost
 	preferHighCost := req.PreferHighCost
 	targetActiveTraits := req.TargetActiveTraits 
