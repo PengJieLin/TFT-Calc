@@ -83,14 +83,14 @@ func HandleRequest(ctx context.Context, req solverRequest) (string, error){
 	if(!useHighCost){
 		fmt.Println("Step 1: Searching for low-cost solutions (Cost < 4)...")
 		lowCostPool := filterPool(champs, initialTeam, 3, preferHighCost)
-		solve(startTeam, lowCostPool, traits, len(initialTeam), targetActiveTraits)
+		solve(startTeam, lowCostPool, traits, 0, len(initialTeam), targetActiveTraits)
 	}
 
 	// 3. Step 2: Fallback to include 4-cost additions if no solution found
 	if len(bestTeam) == 0 {
 		fmt.Println("No solution found with low-cost units. Step 2: Including 4-cost units...")
 		fullPool := filterPool(champs, initialTeam, 4, preferHighCost)
-		solve(startTeam, fullPool, traits, len(initialTeam), targetActiveTraits)
+		solve(startTeam, fullPool, traits, 0, len(initialTeam), targetActiveTraits)
 	}
 
 	// 4. Final Output
@@ -107,7 +107,7 @@ func main() {
 	lambda.Start(HandleRequest)
 }
 
-func solve(currentTeam []Champion, pool []Champion, allTraits []Trait, initialSize int, targetActiveTraits int) {
+func solve(currentTeam []Champion, pool []Champion, allTraits []Trait, startIndex, initialSize int, targetActiveTraits int) {
 	numAdded := len(currentTeam) - initialSize
 
 	if len(bestTeam) > 0 && numAdded >= len(bestTeam) {
@@ -121,7 +121,7 @@ func solve(currentTeam []Champion, pool []Champion, allTraits []Trait, initialSi
 		return
 	}
 
-	for i := 0; i < len(pool); i++ {
+	for i := startIndex; i < len(pool); i++ {
 		currentTeam = append(currentTeam, pool[i])
 		solve(currentTeam, pool, allTraits, i+1, initialSize, targetActiveTraits)
 		currentTeam = currentTeam[:len(currentTeam)-1]
