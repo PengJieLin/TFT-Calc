@@ -14,9 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-
-var bestTeam []Champion
-
 type SolverRequest struct {
     UseHighCost        	bool `json:"use_high_cost"`
     PreferHighCost     	bool `json:"prefer_high_cost"`
@@ -49,7 +46,7 @@ func cleanRequest(req SolverRequest) SolverRequest{
 }
 
 func HandleRequest(ctx context.Context, req SolverRequest) (interface{}, error){
-	bestTeam = []Champion{}
+	var bestTeam = []Champion{}
 	req = cleanRequest(req)
 	useHighCost := req.UseHighCost
 	preferHighCost := req.PreferHighCost
@@ -83,14 +80,14 @@ func HandleRequest(ctx context.Context, req SolverRequest) (interface{}, error){
 	if(!useHighCost){
 		fmt.Println("Step 1: Searching for low-cost solutions (Cost < 4)...")
 		lowCostPool := filterPool(champs, initialTeam, 3, preferHighCost)
-		solve(startTeam, lowCostPool, traits, 0, len(initialTeam), targetActiveTraits)
+		solve(startTeam, lowCostPool, traits, 0, len(initialTeam), targetActiveTraits, bestTeam)
 	}
 
 	// 3. Step 2: Fallback to include 4-cost additions if no solution found
 	if len(bestTeam) == 0 {
 		fmt.Println("No solution found with low-cost units. Step 2: Including 4-cost units...")
 		fullPool := filterPool(champs, initialTeam, 4, preferHighCost)
-		solve(startTeam, fullPool, traits, 0, len(initialTeam), targetActiveTraits)
+		solve(startTeam, fullPool, traits, 0, len(initialTeam), targetActiveTraits, bestTeam)
 	}
 
 	// 4. Final Output
@@ -107,7 +104,7 @@ func main() {
 	lambda.Start(HandleRequest)
 }
 
-func solve(currentTeam []Champion, pool []Champion, allTraits []Trait, startIndex, initialSize int, targetActiveTraits int) {
+func solve(currentTeam []Champion, pool []Champion, allTraits []Trait, startIndex, initialSize int, targetActiveTraits int, bestTeam []Champion) {
 	numAdded := len(currentTeam) - initialSize
 
 	if len(bestTeam) > 0 && numAdded >= len(bestTeam) {
@@ -123,7 +120,7 @@ func solve(currentTeam []Champion, pool []Champion, allTraits []Trait, startInde
 
 	for i := startIndex; i < len(pool); i++ {
 		currentTeam = append(currentTeam, pool[i])
-		solve(currentTeam, pool, allTraits, i+1, initialSize, targetActiveTraits)
+		solve(currentTeam, pool, allTraits, i+1, initialSize, targetActiveTraits, bestTeam)
 		currentTeam = currentTeam[:len(currentTeam)-1]
 	}
 }
