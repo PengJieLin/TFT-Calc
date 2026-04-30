@@ -1,30 +1,35 @@
 package main
 
 import (
+	"context"
 	"encoding/csv"
 	"fmt"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
-	"context"
-	
+	"sync"
+
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+// --- GLOBALS (Cached across warm starts) ---
 var (
-    cachedChamps []Champion
-    cachedTraits []Trait
-    once         sync.Once
+	cachedChamps []Champion
+	cachedTraits []Trait
+	once         sync.Once
+	initErr      error
 )
 
+// --- TYPES ---
+
 type SolverRequest struct {
-    UseHighCost        	bool `json:"use_high_cost"`
-    PreferHighCost     	bool `json:"prefer_high_cost"`
-    TargetActiveTraits 	int  `json:"target_active_traits"`
-	InitialTeam			[]Champion `json:"initial_team"`
+	UseHighCost        bool       `json:"use_high_cost"`
+	PreferHighCost     bool       `json:"prefer_high_cost"`
+	TargetActiveTraits int        `json:"target_active_traits"`
+	InitialTeam        []Champion `json:"initial_team"`
 }
 
 type Champion struct {
@@ -38,71 +43,79 @@ type Trait struct {
 	MinRequired int    `json:"minRequired"`
 }
 
-func cleanRequest(req SolverRequest) SolverRequest{
-	if req.TargetActiveTraits == 0{
+// --- CORE LOGIC ---
+
+func cleanRequest(req SolverRequest) SolverRequest {
+	if req.TargetActiveTraits == 0 {
 		req.TargetActiveTraits = 6
-	} else if req.TargetActiveTraits > 11{
+	} else if req.TargetActiveTraits > 11 {
 		req.TargetActiveTraits = 11
 	}
-	if len(req.InitialTeam) > 8 { req.InitialTeam = req.InitialTeam[:8] }
-	//for i, name := range req.InitialTeam {
-		//req.InitialTeam[i] = strings.ToLower(strings.TrimSpace(name))
-	//}
+	if len(req.InitialTeam) > 8 {
+		req.InitialTeam = req.InitialTeam[:8]
+	}
 	return req
 }
 
-func HandleRequest(ctx context.Context, req SolverRequest) (interface{}, error){
-	var bestTeam = []Champion{}
+func HandleRequest(ctx context.Context, req SolverRequest) (interface{}, error) {
+	// 1. Initialize local result slice for THIS request only
+	var bestTeam []Champion 
 	req = cleanRequest(req)
-	
-	useHighCost := req.UseHighCost
-	preferHighCost := req.PreferHighCost
-	targetActiveTraits := req.TargetActiveTraits 
-	initialTeam := req.InitialTeam
 
+	// 2. Load data from S3 (Only happens once per Lambda instance)
 	once.Do(func() {
-		// Load AWS configuration (credentials, region, etc.)
 		cfg, err := config.LoadDefaultConfig(ctx)
-		if err != nil { return "", err }
-
-		// Create the S3 client
+		if err != nil {
+			initErr = err
+			return
+		}
 		s3Client := s3.NewFromConfig(cfg)
-		
-		// Get the bucket name from an environment variable (we'll set this in Terraform later)
 		bucketName := os.Getenv("DATA_BUCKET")
 
-		// Now call your updated loaders
-		champs, err := loadChampions(ctx, s3Client, bucketName, "champions.csv")
-		if err != nil { return "", err }
+		cachedChamps, err = loadChampions(ctx, s3Client, bucketName, "champions.csv")
+		if err != nil {
+			initErr = err
+			return
+		}
 
-		traits, err := loadTraits(ctx, s3Client, bucketName, "traits.csv")
-		if err != nil { return "", err }
+		cachedTraits, err = loadTraits(ctx, s3Client, bucketName, "traits.csv")
+		if err != nil {
+			initErr = err
+			return
+		}
 	})
 
-	fmt.Printf("=== TFT Optimizer | Target: %d Active Traits ===\n", targetActiveTraits)
+	if initErr != nil {
+		return nil, fmt.Errorf("initialization failed: %v", initErr)
+	}
 
-	startTeam := make([]Champion, len(initialTeam))
-	copy(startTeam, initialTeam)
+	fmt.Printf("=== TFT Optimizer | Target: %d Active Traits ===\n", req.TargetActiveTraits)
 
-	// 2. Step 1: Search WITHOUT 4-cost additions
-	if(!useHighCost){
+	startTeam := make([]Champion, len(req.InitialTeam))
+	copy(startTeam, req.InitialTeam)
+
+	// maxAdditions prevents the recursion from blowing up and timing out
+	maxAdditions := 4 
+
+	// 3. Step 1: Search WITHOUT 4-cost additions if requested
+	if !req.UseHighCost {
 		fmt.Println("Step 1: Searching for low-cost solutions (Cost < 4)...")
-		lowCostPool := filterPool(champs, initialTeam, 3, preferHighCost)
-		solve(startTeam, lowCostPool, traits, 0, len(initialTeam), targetActiveTraits, bestTeam)
+		lowCostPool := filterPool(cachedChamps, req.InitialTeam, 3, req.PreferHighCost)
+		solve(startTeam, lowCostPool, cachedTraits, 0, len(req.InitialTeam), req.TargetActiveTraits, &bestTeam, maxAdditions)
 	}
 
-	// 3. Step 2: Fallback to include 4-cost additions if no solution found
+	// 4. Step 2: Fallback to include 4-cost units
 	if len(bestTeam) == 0 {
-		fmt.Println("No solution found with low-cost units. Step 2: Including 4-cost units...")
-		fullPool := filterPool(champs, initialTeam, 4, preferHighCost)
-		solve(startTeam, fullPool, traits, 0, len(initialTeam), targetActiveTraits, bestTeam)
+		fmt.Println("Step 2: Searching with units up to 4-cost...")
+		fullPool := filterPool(cachedChamps, req.InitialTeam, 4, req.PreferHighCost)
+		solve(startTeam, fullPool, cachedTraits, 0, len(req.InitialTeam), req.TargetActiveTraits, &bestTeam, maxAdditions)
 	}
 
-	// 4. Final Output
+	// 5. Final Output & Logging
 	if len(bestTeam) == 0 {
-		fmt.Println("\n❌ No solution found even with 4-cost units.")
+		fmt.Println("\n❌ No solution found within addition limit.")
 	} else {
-		displayFinalResults(initialTeam, bestTeam, traits)
+		displayFinalResults(req.InitialTeam, bestTeam, cachedTraits)
 	}
 
 	return bestTeam, nil
@@ -112,24 +125,31 @@ func main() {
 	lambda.Start(HandleRequest)
 }
 
-func solve(currentTeam []Champion, pool []Champion, allTraits []Trait, startIndex, initialSize int, targetActiveTraits int, bestTeam []Champion) {
+// solve now uses a pointer to bestTeam and a maxDepth limit
+func solve(currentTeam []Champion, pool []Champion, allTraits []Trait, startIndex, initialSize int, targetActiveTraits int, bestTeam *[]Champion, maxDepth int) {
 	numAdded := len(currentTeam) - initialSize
 
-	if len(bestTeam) > 0 && numAdded >= len(bestTeam) {
+	// Pruning: If we found a solution, don't look for longer ones
+	if len(*bestTeam) > 0 && numAdded >= len(*bestTeam) {
+		return
+	}
+
+	// Safety: Prevent recursion explosion
+	if numAdded > maxDepth {
 		return
 	}
 
 	if isSatisfied(currentTeam, allTraits, targetActiveTraits) {
 		newUnits := make([]Champion, numAdded)
 		copy(newUnits, currentTeam[initialSize:])
-		bestTeam = newUnits
+		*bestTeam = newUnits
 		return
 	}
 
 	for i := startIndex; i < len(pool); i++ {
 		currentTeam = append(currentTeam, pool[i])
-		solve(currentTeam, pool, allTraits, i+1, initialSize, targetActiveTraits, bestTeam)
-		currentTeam = currentTeam[:len(currentTeam)-1]
+		solve(currentTeam, pool, allTraits, i+1, initialSize, targetActiveTraits, bestTeam, maxDepth)
+		currentTeam = currentTeam[:len(currentTeam)-1] // Backtrack
 	}
 }
 
@@ -164,12 +184,11 @@ func filterPool(champs []Champion, initialTeam []Champion, maxCost int, preferHi
 		}
 	}
 	sort.Slice(pool, func(i, j int) bool {
-		//Sort by cost then sort by trait count
-		if(preferHighCost){
+		if preferHighCost {
 			if pool[i].Cost != pool[j].Cost {
-			return pool[i].Cost > pool[j].Cost
+				return pool[i].Cost > pool[j].Cost
 			}
-		}else{
+		} else {
 			if pool[i].Cost != pool[j].Cost {
 				return pool[i].Cost < pool[j].Cost
 			}
@@ -185,7 +204,7 @@ func displayFinalResults(initial []Champion, additions []Champion, allTraits []T
 	fmt.Println("\n==========================================")
 	fmt.Println("             OPTIMAL FULL TEAM            ")
 	fmt.Println("==========================================")
-	
+
 	totalCost := 0
 	for _, c := range fullBoard {
 		label := "[ADDED]"
@@ -198,10 +217,7 @@ func displayFinalResults(initial []Champion, additions []Champion, allTraits []T
 		totalCost += c.Cost
 	}
 
-	fmt.Printf("\nTotal Team Size: %d", len(fullBoard))
-	fmt.Printf("\nTotal Team Cost: %d", totalCost)
-
-	// Display active traits for the entire team
+	// Active Traits Calculation
 	counts := make(map[string]int)
 	for _, champ := range fullBoard {
 		for _, tName := range champ.Traits {
@@ -209,35 +225,44 @@ func displayFinalResults(initial []Champion, additions []Champion, allTraits []T
 		}
 	}
 
-	fmt.Println("\n\n--- Active Traits ---")
+	fmt.Println("\n--- Active Traits ---")
 	for _, t := range allTraits {
 		if counts[t.Name] >= t.MinRequired {
 			fmt.Printf(" ✅ %-14s (%d/%d)\n", t.Name, counts[t.Name], t.MinRequired)
 		}
 	}
+	fmt.Printf("\nTotal Cost: %d | Total Size: %d\n", totalCost, len(fullBoard))
 	fmt.Println("==========================================")
 }
 
-// --- LOADERS ---
+// --- S3 LOADERS ---
 
 func loadChampions(ctx context.Context, client *s3.Client, bucket string, key string) ([]Champion, error) {
 	output, err := client.GetObject(ctx, &s3.GetObjectInput{
-        Bucket: &bucket,
-        Key:    &key,
-    })
+		Bucket: &bucket,
+		Key:    &key,
+	})
 	if err != nil {
-        return nil, fmt.Errorf("unable to fetch %s from bucket %s: %v", key, bucket, err)
-    }
-    defer output.Body.Close()
+		return nil, err
+	}
+	defer output.Body.Close()
 
 	reader := csv.NewReader(output.Body)
-	records, _ := reader.ReadAll()
+	records, err := reader.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+
 	var champions []Champion
 	for i, row := range records {
-		if i == 0 || len(row) < 3 { continue }
+		if i == 0 || len(row) < 3 {
+			continue
+		}
 		cost, _ := strconv.Atoi(row[2])
 		champions = append(champions, Champion{
-			Name: row[0], Traits: strings.Split(row[1], ";"), Cost: cost,
+			Name:   row[0],
+			Traits: strings.Split(row[1], ";"),
+			Cost:   cost,
 		})
 	}
 	return champions, nil
@@ -245,19 +270,25 @@ func loadChampions(ctx context.Context, client *s3.Client, bucket string, key st
 
 func loadTraits(ctx context.Context, client *s3.Client, bucket string, key string) ([]Trait, error) {
 	output, err := client.GetObject(ctx, &s3.GetObjectInput{
-		Bucket:	&bucket,
-		Key:	&key,
+		Bucket: &bucket,
+		Key:    &key,
 	})
 	if err != nil {
-        return nil, fmt.Errorf("unable to fetch %s from bucket %s: %v", key, bucket, err)
-    }
-    defer output.Body.Close()
+		return nil, err
+	}
+	defer output.Body.Close()
 
 	reader := csv.NewReader(output.Body)
-	records, _ := reader.ReadAll()
+	records, err := reader.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+
 	var traits []Trait
 	for i, row := range records {
-		if i == 0 || len(row) < 2 { continue }
+		if i == 0 || len(row) < 2 {
+			continue
+		}
 		minReq, _ := strconv.Atoi(row[1])
 		traits = append(traits, Trait{Name: row[0], MinRequired: minReq})
 	}
