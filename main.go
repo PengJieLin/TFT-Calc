@@ -42,9 +42,9 @@ func cleanRequest(req SolverRequest) SolverRequest{
 		req.TargetActiveTraits = 11
 	}
 	if len(req.InitialTeam) > 8 { req.InitialTeam = req.InitialTeam[:8] }
-	for i, name := range req.InitialTeam {
+	//for i, name := range req.InitialTeam {
 		//req.InitialTeam[i] = strings.ToLower(strings.TrimSpace(name))
-	}
+	//}
 	return req
 }
 
