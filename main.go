@@ -48,13 +48,13 @@ func cleanRequest(req req){
 	return req
 }
 
-func HandleRequest(ctx context.Context, req solverRequest) (string, error){
+func HandleRequest(ctx context.Context, SolverRequest req) (string, error){
 
-	solverRequest := cleanRequest(solverRequest)
-	useHighCost := solverRequest.UseHighCost
-	preferHighCost := solverRequest.PreferHighCost
-	targetActiveTraits := solverRequest.TargetActiveTraits 
-	initialTeam := solverRequest.InitialTeam
+	req := cleanRequest(req)
+	useHighCost := req.UseHighCost
+	preferHighCost := req.PreferHighCost
+	targetActiveTraits := req.TargetActiveTraits 
+	initialTeam := req.InitialTeam
 
 	// Load AWS configuration (credentials, region, etc.)
     cfg, err := config.LoadDefaultConfig(ctx)
