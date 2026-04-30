@@ -36,9 +36,12 @@ type Trait struct {
 }
 
 func cleanRequest(req req){
-	if(req.targetActiveTraits == 0){ req.targetActiveTraits = 6}
-	else if(req.TargetActiveTraits > 11){ req.targetActiveTraits = 11}
-	if(len(req.InitialTeam)){ req.InitialTeam = req.InitialTeam[:8] }
+	if req.targetActiveTraits == 0{
+		req.targetActiveTraits = 6
+	} else if req.TargetActiveTraits > 11{
+		req.targetActiveTraits = 11
+	}
+	if len(req.InitialTeam){ req.InitialTeam = req.InitialTeam[:8] }
 	for i, name := range req.InitialTeam {
 		req.InitialTeam[i] = strings.ToLower(strings.TrimSpace(name))
 	}
@@ -97,7 +100,7 @@ func HandleRequest(ctx context.Context, req solverRequest) (string, error){
 		displayFinalResults(initialTeam, bestTeam, traits)
 	}
 
-	return "Done!", nil
+	return bestTeam, nil
 }
 
 func main() {
