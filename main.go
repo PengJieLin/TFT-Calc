@@ -48,7 +48,7 @@ func cleanRequest(req req){
 	return req
 }
 
-func HandleRequest(ctx context.Context, SolverRequest req) (string, error){
+func HandleRequest(ctx context.Context, req SolverRequest) (interface{}, error){
 
 	req := cleanRequest(req)
 	useHighCost := req.UseHighCost
