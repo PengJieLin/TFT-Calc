@@ -49,7 +49,7 @@ func cleanRequest(req SolverRequest) SolverRequest{
 }
 
 func HandleRequest(ctx context.Context, req SolverRequest) (interface{}, error){
-
+	bestTeam = []Champion{}
 	req = cleanRequest(req)
 	useHighCost := req.UseHighCost
 	preferHighCost := req.PreferHighCost
