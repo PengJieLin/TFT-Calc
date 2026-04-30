@@ -21,7 +21,7 @@ type SolverRequest struct {
     UseHighCost        	bool `json:"use_high_cost"`
     PreferHighCost     	bool `json:"prefer_high_cost"`
     TargetActiveTraits 	int  `json:"target_active_traits"`
-	InitialTeam			[]string `json:"initial_team"`
+	InitialTeam			[]Champion `json:"initial_team"`
 }
 
 type Champion struct {
@@ -35,7 +35,7 @@ type Trait struct {
 	MinRequired int    `json:"minRequired"`
 }
 
-func cleanRequest(req SolverRequest){
+func cleanRequest(req SolverRequest) SolverRequest{
 	if req.TargetActiveTraits == 0{
 		req.TargetActiveTraits = 6
 	} else if req.TargetActiveTraits > 11{
