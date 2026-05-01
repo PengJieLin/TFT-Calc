@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
@@ -63,7 +64,7 @@ func HandleRequest(ctx context.Context, req SolverRequest) (interface{}, error) 
 
 	once.Do(func() {
         var err error 
-        var cfg config.Config
+        var cfg aws.Config
 
         cfg, err = config.LoadDefaultConfig(ctx)
         if err != nil {
