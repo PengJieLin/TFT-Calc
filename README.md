@@ -1,5 +1,6 @@
 (WIP) TFT Calculator for Trait Optimization and Maximization
 
+=============================================================================================================================================================================
 
 A backend engine built in Go that calculates optimal team combinations for Teamfight Tactics (TFT).
 
@@ -14,7 +15,7 @@ IaC: Terraform
 
 CI/CD: GitHub Actions
 
-
+____________________________________________________________________________________________________________________________________________________________________________
 
 How It Works
 
@@ -26,7 +27,7 @@ Optimization: The Go binary uses global state caching to ensure that data ingest
 
 Deployment: Terraform manages the entire AWS lifecycle, from IAM permissions to S3 bucket policies and Lambda triggers.
 
-
+____________________________________________________________________________________________________________________________________________________________________________
 
 Project Structure
 
