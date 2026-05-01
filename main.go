@@ -58,36 +58,38 @@ func cleanRequest(req SolverRequest) SolverRequest {
 }
 
 func HandleRequest(ctx context.Context, req SolverRequest) (interface{}, error) {
-	// 1. Initialize local result slice for THIS request only
 	bestTeam := []Champion{}
 	req = cleanRequest(req)
 
-	// 2. Load data from S3 (Only happens once per Lambda instance)
 	once.Do(func() {
-		cfg, err := config.LoadDefaultConfig(ctx)
-		if err != nil {
-			initErr = err
-			return
-		}
-		s3Client := s3.NewFromConfig(cfg)
-		bucketName := os.Getenv("DATA_BUCKET")
+        var err error 
+        var cfg config.Config
 
-		cachedChamps, err = loadChampions(ctx, s3Client, bucketName, "champions.csv")
-		if err != nil {
-			initErr = err
-			return
-		}
+        cfg, err = config.LoadDefaultConfig(ctx)
+        if err != nil {
+            initErr = err
+            return
+        }
+        
+        s3Client := s3.NewFromConfig(cfg)
+        bucketName := os.Getenv("DATA_BUCKET")
 
-		cachedTraits, err = loadTraits(ctx, s3Client, bucketName, "traits.csv")
-		if err != nil {
-			initErr = err
-			return
-		}
-	})
+        cachedChamps, err = loadChampions(ctx, s3Client, bucketName, "champions.csv")
+        if err != nil {
+            initErr = err
+            return
+        }
 
-	if initErr != nil {
-		return nil, fmt.Errorf("initialization failed: %v", initErr)
-	}
+        cachedTraits, err = loadTraits(ctx, s3Client, bucketName, "traits.csv")
+        if err != nil {
+            initErr = err
+            return
+        }
+    })
+
+    if initErr != nil {
+        return nil, fmt.Errorf("initialization failed: %v", initErr)
+    }
 
 	fmt.Printf("=== TFT Optimizer | Target: %d Active Traits ===\n", req.TargetActiveTraits)
 
