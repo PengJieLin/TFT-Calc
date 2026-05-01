@@ -98,7 +98,7 @@ func HandleRequest(ctx context.Context, req SolverRequest) (interface{}, error) 
 	copy(startTeam, req.InitialTeam)
 
 	// maxAdditions prevents the recursion from blowing up and timing out
-	maxAdditions := 4 
+	maxAdditions := 8 
 
 	// 3. Step 1: Search WITHOUT 4-cost additions if requested
 	if !req.UseHighCost {
