@@ -1,6 +1,6 @@
 (WIP) TFT Calculator for Trait Optimization and Maximization
 
-=============================================================================================================================================================================
+=========================================================================
 
 A backend engine built in Go that calculates optimal team combinations for Teamfight Tactics (TFT).
 
