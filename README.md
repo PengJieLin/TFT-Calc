@@ -35,6 +35,10 @@ main.go: The core solver logic and Lambda handler.
 
 main.tf: Terraform configuration for AWS infrastructure.
 
+terraform.tf: Setup terraform and AWS Region.
+
+variables.tf: Variables file for terraform to allow for easy modification of AWS infrastructure.
+
 .github/workflows: Automated CI/CD pipeline.
 
 data/: Sample game datasets used for the solver.
